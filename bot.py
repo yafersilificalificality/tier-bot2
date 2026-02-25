@@ -1,8 +1,13 @@
 import discord
 from discord.ext import commands
 import os
+from discord import app_commands
 
 TOKEN = os.getenv("TOKEN")
+intents = discord.Intents.default()
+intents.message_content = True
+intents.members = True
+bot = commands.Bot(command_prefix="!", intents=intents)
 
 queues = {
     "nethop": [],
@@ -15,8 +20,142 @@ queues = {
     "smp": []
 }
 
+queue_open = {
+    "nethop": False,
+    "pot": False,
+    "sword": False,
+    "axe": False,
+    "vanilla": False,
+    "mace": False,
+    "uhc": False,
+    "smp": False
+}
+
+STAFF_ROLE_IDS = [1470069421379948585]  # replace with your staff role ID
+
+def is_staff(member):
+    return any(role.id in STAFF_ROLE_IDS for role in member.roles)
+
+class QueuePanel(discord.ui.View):
+    def __init__(self, gamemode):
+        super().__init__(timeout=None)
+        self.gamemode = gamemode
+
+    @discord.ui.button(label="Open Queue", style=discord.ButtonStyle.green)
+    async def open_queue(self, interaction, button):
+
+        if not is_staff(interaction.user):
+            return await interaction.response.send_message("❌ Staff only.", ephemeral=True)
+
+        queue_open[self.gamemode] = True
+        await interaction.response.send_message(f"✅ **{self.gamemode.upper()} queue opened.**")
+
+    @discord.ui.button(label="Close Queue", style=discord.ButtonStyle.red)
+    async def close_queue(self, interaction, button):
+
+        if not is_staff(interaction.user):
+            return await interaction.response.send_message("❌ Staff only.", ephemeral=True)
+
+        queue_open[self.gamemode] = False
+        await interaction.response.send_message(f"❌ **{self.gamemode.upper()} queue closed.**")
+
+    @discord.ui.button(label="Join Queue", style=discord.ButtonStyle.blurple)
+    async def join_queue(self, interaction, button):
+
+        if not queue_open[self.gamemode]:
+            return await interaction.response.send_message("❌ Queue is closed.", ephemeral=True)
+
+        await interaction.response.send_modal(TierTestModal(self.gamemode))
+
+class TierTestModal(discord.ui.Modal, title="Tier Test Form"):
+
+    server = discord.ui.TextInput(label="Server Name", placeholder="e.g. minemen.club")
+    tier = discord.ui.TextInput(label="Current Tier", placeholder="HT3, LT2, etc")
+
+    def __init__(self, gamemode):
+        super().__init__()
+        self.gamemode = gamemode
+
+    async def on_submit(self, interaction):
+
+        user = interaction.user
+        tier = self.tier.value.upper()
+
+        TICKET_TIERS = ["HT1","LT1","HT2","LT2","HT3"]
+
+        if tier in TICKET_TIERS:
+            await open_private_ticket(interaction, self.gamemode)
+            return
+
+        queues[self.gamemode].append(user.id)
+
+        await interaction.response.send_message(
+            f"✅ You joined **{self.gamemode.upper()}** queue.\n"
+            f"Position: **#{len(queues[self.gamemode])}**",
+            ephemeral=True
+        )
+
+        await try_open_ticket(interaction.guild, self.gamemode)
+
+async def try_open_ticket(guild, gamemode):
+
+    if not queues[gamemode]:
+        return
+
+    user_id = queues[gamemode][0]
+    member = guild.get_member(user_id)
+
+    if not member:
+        return
+
+    await open_private_ticket(member, gamemode)
+
+async def open_private_ticket(interaction_or_member, gamemode):
+
+    guild = interaction_or_member.guild if isinstance(interaction_or_member, discord.Interaction) else interaction_or_member.guild
+    user = interaction_or_member.user if isinstance(interaction_or_member, discord.Interaction) else interaction_or_member
+
+    category = discord.utils.get(guild.categories, name="Tickets")
+
+    overwrites = {
+        guild.default_role: discord.PermissionOverwrite(view_channel=False),
+        user: discord.PermissionOverwrite(view_channel=True, send_messages=True)
+    }
+
+    for role_id in STAFF_ROLE_IDS:
+        role = guild.get_role(role_id)
+        if role:
+            overwrites[role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
+
+    channel = await guild.create_text_channel(
+        name=f"ticket-{user.name}",
+        category=category,
+        overwrites=overwrites
+    )
+
+    await channel.send(f"🎫 **Tier Test Ticket**\nGamemode: **{gamemode.upper()}**\nUser: {user.mention}")
+
+@bot.tree.command(name="panel", description="Open testing panel")
+@app_commands.describe(gamemode="Gamemode")
+async def panel(interaction, gamemode: str):
+
+    if not is_staff(interaction.user):
+        return await interaction.response.send_message("❌ Staff only.", ephemeral=True)
+
+    gamemode = gamemode.lower()
+
+    if gamemode not in queues:
+        return await interaction.response.send_message("❌ Invalid gamemode.", ephemeral=True)
+
+    await interaction.response.send_message(
+        f"🎛 **{gamemode.upper()} Queue Panel**",
+        view=QueuePanel(gamemode)
+    )
+
 async def open_ticket_for_first(interaction: discord.Interaction, gamemode: str):
     guild = interaction.guild
+
+
 
     # Category name for tickets
     category_name = f"{gamemode}-tickets"
