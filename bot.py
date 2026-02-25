@@ -13,7 +13,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 # ===== CONFIG =====
 
-STAFF_ROLE_IDS = [1472880271279001600]  # REPLACE WITH YOUR STAFF ROLE IDS
+STAFF_ROLE_IDS = [1470069421379948585]  # REPLACE WITH YOUR STAFF ROLE IDS
 
 TICKET_TIERS = ["HT1", "LT1", "HT2", "LT2", "HT3"]
 
@@ -271,5 +271,6 @@ async def open_private_ticket(interaction_or_member, gamemode, server, tier):
     await channel.send(embed=embed, view=CloseTicketView(gamemode, user.id))
 
 # ===== RUN =====
+
 
 bot.run(TOKEN)
