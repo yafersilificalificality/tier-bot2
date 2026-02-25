@@ -27,10 +27,9 @@ async def on_ready():
     await bot.tree.sync()
     print(f"Bot online as {bot.user}")
 
-# ---------------- QUEUE JOIN ----------------
+# ---------------- JOIN QUEUE ----------------
 
 @bot.tree.command(name="join", description="Join tier test queue")
-@app_commands.describe(gamemode="Choose a gamemode")
 @app_commands.choices(gamemode=[
     app_commands.Choice(name="NethOP", value="nethop"),
     app_commands.Choice(name="Pot", value="pot"),
@@ -63,7 +62,7 @@ async def join_queue(interaction, gamemode):
     if pos == 1:
         await open_ticket(interaction.guild, user, gamemode)
 
-# ---------------- TICKET SYSTEM ----------------
+# ---------------- OPEN TICKET ----------------
 
 async def open_ticket(guild, user, gamemode):
     staff_role = discord.utils.get(guild.roles, name="Staff")
@@ -131,9 +130,48 @@ async def open_next(guild, gamemode):
     if user:
         await open_ticket(guild, user, gamemode)
 
+# ---------------- REMOVE FROM QUEUE ----------------
+
+@bot.tree.command(name="remove", description="Remove a user from a queue (staff only)")
+@app_commands.describe(gamemode="Gamemode", user="User to remove")
+@app_commands.choices(gamemode=[
+    app_commands.Choice(name="NethOP", value="nethop"),
+    app_commands.Choice(name="Pot", value="pot"),
+    app_commands.Choice(name="Sword", value="sword"),
+    app_commands.Choice(name="Axe", value="axe"),
+    app_commands.Choice(name="Vanilla", value="vanilla"),
+    app_commands.Choice(name="Mace", value="mace"),
+    app_commands.Choice(name="UHC", value="uhc"),
+    app_commands.Choice(name="SMP", value="smp")
+])
+async def remove(interaction: discord.Interaction, gamemode: app_commands.Choice[str], user: discord.Member):
+
+    staff_role = discord.utils.get(interaction.guild.roles, name="Staff")
+
+    if staff_role not in interaction.user.roles:
+        await interaction.response.send_message("❌ You don't have permission.", ephemeral=True)
+        return
+
+    queue = queues[gamemode.value]
+
+    if user.id not in queue:
+        await interaction.response.send_message("User is not in that queue.", ephemeral=True)
+        return
+
+    pos = queue.index(user.id) + 1
+    queue.remove(user.id)
+
+    await interaction.response.send_message(
+        f"✅ Removed **{user.name}** from **{gamemode.value.upper()} queue** (was #{pos})",
+        ephemeral=True
+    )
+
+    if pos == 1:
+        await open_next(interaction.guild, gamemode.value)
+
 # ---------------- QUEUE VIEW ----------------
 
-@bot.tree.command(name="queue", description="View current queue")
+@bot.tree.command(name="queue", description="View queue")
 async def queue_view(interaction: discord.Interaction, gamemode: str):
     if gamemode not in queues:
         await interaction.response.send_message("Invalid gamemode.", ephemeral=True)
